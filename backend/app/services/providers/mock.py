@@ -4,7 +4,6 @@ from typing import Any, Literal
 from PIL import Image
 
 from app.services.image_utils import (
-    apply_direction_badge,
     build_palette_notes,
     build_silhouette_notes,
     darken_image,
@@ -102,25 +101,12 @@ class MockImageProvider(ImageProvider):
         base_image = normalize_to_canvas(Image.open(reference_image_path).convert("RGBA"), target_size)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        variant = apply_direction_badge(base_image, "OBJ", "#1d4ed8")
         output_path = output_dir / "object.png"
-        save_png(variant, output_path)
+        save_png(base_image, output_path)
 
         return [GeneratedAsset(filename="object.png", label="object", path=output_path)]
 
     def _build_character_variant(self, base_image: Image.Image, direction_label: str) -> Image.Image:
-        badge_map = {
-            "front": ("F", "#2563eb"),
-            "back": ("B", "#4b5563"),
-            "left": ("L", "#059669"),
-            "right": ("R", "#ea580c"),
-            "front left": ("FL", "#0891b2"),
-            "front right": ("FR", "#7c3aed"),
-            "back left": ("BL", "#16a34a"),
-            "back right": ("BR", "#dc2626"),
-        }
-        badge_text, badge_color = badge_map[direction_label]
-
         variant = base_image.copy()
         if "right" in direction_label:
             variant = mirror_image(variant)
@@ -131,7 +117,7 @@ class MockImageProvider(ImageProvider):
         elif "back" in direction_label:
             variant = darken_image(variant, 0.9)
 
-        return apply_direction_badge(variant, badge_text, badge_color)
+        return variant
 
     def _shape_from_image(self, image: Image.Image) -> str:
         aspect_ratio = image.width / max(image.height, 1)
@@ -150,4 +136,3 @@ class MockImageProvider(ImageProvider):
             if keyword in normalized_notes:
                 return keyword
         return fallback
-

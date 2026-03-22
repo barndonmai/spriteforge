@@ -15,10 +15,17 @@ from app.services.storage import get_manifest_path, save_reference_upload
 
 def validate_upload(reference_image: UploadFile, mode: str, target_size: int) -> None:
     allowed_modes = {"character", "object", "auto"}
+    allowed_content_types = {"image/png", "image/jpeg"}
+    allowed_extensions = {".png", ".jpg", ".jpeg"}
+
     if mode not in allowed_modes:
         raise HTTPException(status_code=422, detail=f"mode must be one of: {', '.join(sorted(allowed_modes))}")
-    if not reference_image.content_type or not reference_image.content_type.startswith("image/"):
-        raise HTTPException(status_code=422, detail="reference_image must be an image upload")
+
+    filename = reference_image.filename or ""
+    extension = Path(filename).suffix.lower()
+    if reference_image.content_type not in allowed_content_types or extension not in allowed_extensions:
+        raise HTTPException(status_code=422, detail="reference_image must be a PNG or JPEG file")
+
     if target_size <= 0:
         raise HTTPException(status_code=422, detail="target_size must be greater than 0")
 
@@ -114,4 +121,3 @@ def get_job_or_404(session: Session, job_id: str) -> Job:
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
     return job
-

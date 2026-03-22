@@ -34,8 +34,7 @@ This v1 scaffold includes:
 │       ├── app
 │       ├── components
 │       └── lib
-├── .env.example
-└── docker-compose.yml
+└── .env.example
 ```
 
 ## Project direction
@@ -181,6 +180,12 @@ Character outputs use:
 Object outputs use:
 
 - `object.png`
+
+Uploads are limited to:
+
+- `.png`
+- `.jpg`
+- `.jpeg`
 
 ## Why this setup exists
 

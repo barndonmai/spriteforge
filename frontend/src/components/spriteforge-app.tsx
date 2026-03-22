@@ -13,6 +13,7 @@ export function SpriteForgeApp() {
   const [mode, setMode] = useState<JobMode>("auto");
   const [targetSize, setTargetSize] = useState<number>(64);
   const [notes, setNotes] = useState<string>("");
+  const [fileError, setFileError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [job, setJob] = useState<JobStatusResponse | null>(null);
   const [results, setResults] = useState<JobResultsResponse | null>(null);
@@ -83,6 +84,13 @@ export function SpriteForgeApp() {
     }
   };
 
+  const handleFileChange = (nextFile: File | null) => {
+    setFile(nextFile);
+    if (nextFile) {
+      setError(null);
+    }
+  };
+
   return (
     <main className="page-shell">
       <header className="hero">
@@ -100,8 +108,10 @@ export function SpriteForgeApp() {
           mode={mode}
           targetSize={targetSize}
           notes={notes}
+          fileError={fileError}
           isSubmitting={isSubmitting}
-          onFileChange={setFile}
+          onFileChange={handleFileChange}
+          onFileValidationError={setFileError}
           onModeChange={setMode}
           onTargetSizeChange={setTargetSize}
           onNotesChange={setNotes}

@@ -7,8 +7,10 @@ interface JobFormProps {
   mode: JobMode;
   targetSize: number;
   notes: string;
+  fileError: string | null;
   isSubmitting: boolean;
   onFileChange: (file: File | null) => void;
+  onFileValidationError: (message: string | null) => void;
   onModeChange: (mode: JobMode) => void;
   onTargetSizeChange: (size: number) => void;
   onNotesChange: (value: string) => void;
@@ -23,7 +25,26 @@ const modeOptions: Array<{ value: JobMode; title: string; copy: string }> = [
 
 export function JobForm(props: JobFormProps) {
   const handleFileInput = (event: ChangeEvent<HTMLInputElement>) => {
-    props.onFileChange(event.target.files?.[0] ?? null);
+    const nextFile = event.target.files?.[0] ?? null;
+    if (!nextFile) {
+      props.onFileValidationError(null);
+      props.onFileChange(null);
+      return;
+    }
+
+    const allowedTypes = new Set(["image/png", "image/jpeg"]);
+    const lowerName = nextFile.name.toLowerCase();
+    const hasAllowedExtension = lowerName.endsWith(".png") || lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg");
+
+    if (!allowedTypes.has(nextFile.type) || !hasAllowedExtension) {
+      event.target.value = "";
+      props.onFileValidationError("Only .png, .jpg, and .jpeg files are supported.");
+      props.onFileChange(null);
+      return;
+    }
+
+    props.onFileValidationError(null);
+    props.onFileChange(nextFile);
   };
 
   return (
@@ -42,11 +63,12 @@ export function JobForm(props: JobFormProps) {
             id="reference-image"
             className="file-input"
             type="file"
-            accept="image/*"
+            accept=".png,.jpg,.jpeg,image/png,image/jpeg"
             onChange={handleFileInput}
             required
           />
-          <span className="muted-copy">{props.file ? props.file.name : "PNG, JPG, WEBP, or similar image formats."}</span>
+          <span className="muted-copy">{props.file ? props.file.name : "PNG and JPEG only."}</span>
+          {props.fileError ? <span className="error-banner">{props.fileError}</span> : null}
         </div>
 
         <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
@@ -106,4 +128,3 @@ export function JobForm(props: JobFormProps) {
     </form>
   );
 }
-
