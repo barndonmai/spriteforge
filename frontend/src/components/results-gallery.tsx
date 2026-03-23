@@ -1,4 +1,5 @@
 import { resolveApiUrl } from "@/lib/api";
+import { formatTorontoDateTime } from "@/lib/formatters";
 import type { JobResultsResponse } from "@/lib/types";
 
 interface ResultsGalleryProps {
@@ -7,6 +8,7 @@ interface ResultsGalleryProps {
 
 export function ResultsGallery({ results }: ResultsGalleryProps) {
   const summaryEntries = Object.entries(results.reference_summary ?? {});
+  const completedAtLabel = formatTorontoDateTime(results.completed_at);
 
   return (
     <section className="rounded-4xl border border-white/70 bg-white/75 p-6 shadow-panel backdrop-blur md:p-7">
@@ -17,6 +19,11 @@ export function ResultsGallery({ results }: ResultsGalleryProps) {
           <p className="mt-2 text-sm leading-6 text-stone-600">
             Preview the finalized assets and download the packaged output bundle.
           </p>
+          {completedAtLabel ? (
+            <p className="mt-2 text-xs font-medium uppercase tracking-[0.16em] text-stone-500">
+              Completed {completedAtLabel}
+            </p>
+          ) : null}
         </div>
 
         <a

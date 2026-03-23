@@ -45,11 +45,18 @@ def get_job_results(job_id: str, request: Request, session: Session = Depends(ge
 @router.get("/{job_id}/download", name="download_job_results")
 def download_job_results(job_id: str, session: Session = Depends(get_db)) -> FileResponse:
     job = get_job_or_404(session, job_id)
+    if job.status == "failed":
+        error_detail = job.error_message or "Job failed before outputs were packaged."
+        raise HTTPException(status_code=409, detail=f"Job failed: {error_detail}")
     if job.status != "completed" or not job.zip_path:
         raise HTTPException(status_code=409, detail="Job zip is not ready yet.")
 
+    zip_path = settings.storage_root_path / job.zip_path
+    if not zip_path.exists():
+        raise HTTPException(status_code=500, detail="Job completed but ZIP file is missing on disk.")
+
     return FileResponse(
-        path=str(settings.storage_root_path / job.zip_path),
+        path=str(zip_path),
         filename=f"spriteforge_{job_id}.zip",
         media_type="application/zip",
     )

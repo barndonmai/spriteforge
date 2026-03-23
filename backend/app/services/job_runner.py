@@ -31,6 +31,7 @@ def process_job(job_id: str) -> None:
             provider = get_image_provider()
             reference_image_path = ensure_storage_root() / job.reference_image_path
 
+            _begin_processing(session, job)
             _update_job(session, job, status="processing", stage="validating_input")
             if not reference_image_path.exists():
                 raise FileNotFoundError(f"Reference image is missing for job {job.id}.")
@@ -57,13 +58,15 @@ def process_job(job_id: str) -> None:
                 target_size=job.target_size,
                 output_dir=raw_output_directory,
             )
+            if not generated_assets:
+                raise RuntimeError("Provider did not return any generated assets.")
 
             _update_job(session, job, status="processing", stage="normalizing_assets")
             final_assets = _normalize_assets(job.id, generated_assets, job.target_size)
+            if not final_assets:
+                raise RuntimeError("No normalized assets were produced for this job.")
 
             _update_job(session, job, status="processing", stage="packaging_results")
-            job.status = "completed"
-            job.stage = None
             job.completed_at = datetime.now(timezone.utc)
             manifest = build_manifest(job, [asset.path for asset in final_assets])
             manifest_path = write_manifest(job.id, manifest)
@@ -71,6 +74,9 @@ def process_job(job_id: str) -> None:
 
             job.manifest_path = to_storage_relative_path(manifest_path)
             job.zip_path = to_storage_relative_path(zip_path)
+            job.status = "completed"
+            job.stage = None
+            job.error_message = None
             save_job(session, job)
 
     except Exception as exc:
@@ -78,8 +84,8 @@ def process_job(job_id: str) -> None:
             job = get_job(session, job_id)
             if job:
                 job.status = "failed"
-                job.error_message = str(exc)
-                job.stage = None
+                job.error_message = _format_job_error(exc)
+                job.completed_at = None
                 save_job(session, job)
         raise
 
@@ -127,3 +133,20 @@ def _update_job(session, job, *, status: str, stage: str | None) -> None:
     job.status = status
     job.stage = stage
     save_job(session, job)
+
+
+def _begin_processing(session, job) -> None:
+    job.status = "processing"
+    job.stage = None
+    job.error_message = None
+    job.completed_at = None
+    job.manifest_path = None
+    job.zip_path = None
+    save_job(session, job)
+
+
+def _format_job_error(exc: Exception) -> str:
+    message = str(exc).strip() or exc.__class__.__name__
+    if len(message) > 500:
+        return f"{message[:497]}..."
+    return message

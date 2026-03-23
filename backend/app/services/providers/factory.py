@@ -10,7 +10,10 @@ def get_image_provider() -> ImageProvider:
     if settings.provider == "mock":
         return MockImageProvider()
     if settings.provider == "gemini":
-        return GeminiImageProvider(api_key=settings.gemini_api_key)
+        return GeminiImageProvider(
+            api_key=settings.gemini_api_key,
+            model_name=settings.gemini_model,
+            image_model_name=settings.gemini_image_model,
+        )
 
     raise ValueError(f"Unsupported SPRITEFORGE_PROVIDER: {settings.provider}")
-

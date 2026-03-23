@@ -28,8 +28,7 @@ export async function createJob(params: {
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || "Failed to create job.");
+    throw new Error(await readApiError(response, "Failed to create job."));
   }
 
   return response.json();
@@ -41,7 +40,7 @@ export async function getJob(jobId: string): Promise<JobStatusResponse> {
   });
 
   if (!response.ok) {
-    throw new Error("Failed to fetch job status.");
+    throw new Error(await readApiError(response, "Failed to fetch job status."));
   }
 
   return response.json();
@@ -53,9 +52,25 @@ export async function getResults(jobId: string): Promise<JobResultsResponse> {
   });
 
   if (!response.ok) {
-    throw new Error("Failed to fetch job results.");
+    throw new Error(await readApiError(response, "Failed to fetch job results."));
   }
 
   return response.json();
 }
 
+async function readApiError(response: Response, fallbackMessage: string): Promise<string> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        return payload.detail;
+      }
+    } catch {
+      return fallbackMessage;
+    }
+  }
+
+  const text = await response.text();
+  return text || fallbackMessage;
+}

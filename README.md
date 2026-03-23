@@ -9,7 +9,7 @@ This v1 scaffold includes:
 - `frontend/`: a small Next.js App Router UI with TypeScript and Tailwind CSS for upload, polling, preview, and download
 - `backend/`: a FastAPI backend with SQLite, Celery, Redis, local storage, manifest output, and provider wiring
 - `MockImageProvider`: a fully runnable local provider for end-to-end testing without paid API calls
-- `GeminiImageProvider`: a backend-only scaffold behind the same interface for later experimentation
+- `GeminiImageProvider`: a backend-only integration behind the same interface, currently limited to reference classification and structured summary extraction
 
 ## Folder structure
 
@@ -141,6 +141,34 @@ npm run dev
 
 The UI will be available at `http://localhost:3000`.
 
+## Gemini setup notes
+
+Mock remains the default provider. If you want to switch the backend to Gemini, set `SPRITEFORGE_PROVIDER=gemini` in `backend/.env` and provide a valid `GEMINI_API_KEY`.
+
+Current Gemini support is backend-only and limited to:
+
+- reference classification
+- structured reference summary extraction
+- object generation
+
+Character generation is still disabled for Gemini.
+
+If you pulled changes after Gemini support was added, reinstall backend dependencies inside the backend virtualenv:
+
+```bash
+cd backend
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+This is required because the Gemini provider depends on the official Google GenAI SDK:
+
+```bash
+google-genai
+```
+
+If you see an error like `google-genai is required for SPRITEFORGE_PROVIDER=gemini`, it means the backend virtualenv needs its dependencies refreshed.
+
 ## v1 flow
 
 1. Upload a reference image.
@@ -210,12 +238,14 @@ That gives me a solid base to build on without overengineering a one-person tool
 - Produces valid PNG outputs in the exact final file structure
 - Reuses the uploaded reference image as the consistent base for all generated directions
 
-### Gemini scaffold
+### Gemini provider
 
 - Kept backend-only
 - Reads credentials from environment variables
 - Isolated behind the same provider interface
-- Marked as scaffolded and not yet fully implemented
+- Uses the official Google GenAI SDK for classification and structured summary extraction
+- Supports object generation only
+- Keeps character generation explicitly disabled for now, with clear backend errors if you try to use it
 
 ## API routes
 

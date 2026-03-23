@@ -15,14 +15,19 @@ export function SpriteForgeApp() {
   const [notes, setNotes] = useState<string>("");
   const [fileError, setFileError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isPolling, setIsPolling] = useState<boolean>(false);
+  const [isLoadingResults, setIsLoadingResults] = useState<boolean>(false);
   const [job, setJob] = useState<JobStatusResponse | null>(null);
   const [results, setResults] = useState<JobResultsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!job || job.status === "completed" || job.status === "failed") {
+      setIsPolling(false);
       return;
     }
+
+    setIsPolling(true);
 
     const loadJobStatus = async () => {
       try {
@@ -40,15 +45,19 @@ export function SpriteForgeApp() {
 
   useEffect(() => {
     if (!job || job.status !== "completed" || results) {
+      setIsLoadingResults(false);
       return;
     }
 
     const loadResults = async () => {
       try {
+        setIsLoadingResults(true);
         const nextResults = await getResults(job.job_id);
         setResults(nextResults);
       } catch (nextError) {
         setError(nextError instanceof Error ? nextError.message : "Failed to fetch completed job results.");
+      } finally {
+        setIsLoadingResults(false);
       }
     };
 
@@ -63,9 +72,11 @@ export function SpriteForgeApp() {
     }
 
     setError(null);
+    setFileError(null);
     setResults(null);
     setJob(null);
     setIsSubmitting(true);
+    setIsLoadingResults(false);
 
     try {
       const createdJob = await createJob({
@@ -77,6 +88,9 @@ export function SpriteForgeApp() {
 
       const fullJob = await getJob(createdJob.job_id);
       setJob(fullJob);
+      if (fullJob.status === "failed" && fullJob.error) {
+        setError(fullJob.error);
+      }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Job submission failed.");
     } finally {
@@ -125,6 +139,21 @@ export function SpriteForgeApp() {
         />
 
         <div className="space-y-6">
+          {isSubmitting ? (
+            <div className="rounded-2xl border border-forge-500/20 bg-forge-500/10 px-4 py-3 text-sm text-forge-700">
+              Uploading your reference and creating the job...
+            </div>
+          ) : null}
+          {isPolling && job ? (
+            <div className="rounded-2xl border border-forge-500/20 bg-forge-500/10 px-4 py-3 text-sm text-forge-700">
+              Worker is running{job.stage ? `: ${job.stage.replaceAll("_", " ")}` : "..."}
+            </div>
+          ) : null}
+          {isLoadingResults ? (
+            <div className="rounded-2xl border border-forge-500/20 bg-forge-500/10 px-4 py-3 text-sm text-forge-700">
+              Loading completed assets and manifest...
+            </div>
+          ) : null}
           {error ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
           ) : null}

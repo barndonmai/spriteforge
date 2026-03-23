@@ -7,6 +7,7 @@ from app.services.image_utils import (
     build_palette_notes,
     build_silhouette_notes,
     darken_image,
+    isolate_main_subject,
     mirror_image,
     normalize_to_canvas,
     save_png,
@@ -14,8 +15,55 @@ from app.services.image_utils import (
 )
 from app.services.providers.base import CHARACTER_DIRECTIONS, GeneratedAsset, ImageProvider
 
-CHARACTER_KEYWORDS = {"character", "hero", "npc", "person", "player", "portrait"}
-OBJECT_KEYWORDS = {"object", "item", "prop", "weapon", "tool", "pickup"}
+CHARACTER_KEYWORDS = {
+    "avatar",
+    "character",
+    "face",
+    "fighter",
+    "hero",
+    "humanoid",
+    "knight",
+    "mage",
+    "npc",
+    "person",
+    "player",
+    "portrait",
+    "warrior",
+    "wizard",
+}
+CHARACTER_BODY_KEYWORDS = {
+    "arm",
+    "body",
+    "eyes",
+    "face",
+    "hair",
+    "hand",
+    "head",
+    "leg",
+    "limb",
+    "torso",
+}
+OBJECT_KEYWORDS = {
+    "bag",
+    "bottle",
+    "box",
+    "brand",
+    "case",
+    "chest",
+    "container",
+    "item",
+    "logo",
+    "object",
+    "package",
+    "packaging",
+    "pouch",
+    "product",
+    "prop",
+    "shopping",
+    "sign",
+    "tool",
+    "weapon",
+}
 
 
 class MockImageProvider(ImageProvider):
@@ -24,13 +72,26 @@ class MockImageProvider(ImageProvider):
     def classify_reference(self, reference_image_path: Path, notes: str | None = None) -> Literal["character", "object"]:
         image = Image.open(reference_image_path).convert("RGBA")
         text_blob = f"{reference_image_path.name} {notes or ''}".lower()
+        opaque_bbox = image.getchannel("A").getbbox()
 
-        if any(keyword in text_blob for keyword in CHARACTER_KEYWORDS):
+        # For the mock provider, object is the safe default.
+        # We only return "character" when we see strong text or silhouette evidence
+        # of a human-like figure. Product, branding, packaging, and generic prop cues
+        # should dominate ambiguous cases so auto mode is less eager.
+        object_score = self._count_keyword_hits(text_blob, OBJECT_KEYWORDS)
+        character_score = self._count_keyword_hits(text_blob, CHARACTER_KEYWORDS)
+        body_score = self._count_keyword_hits(text_blob, CHARACTER_BODY_KEYWORDS)
+
+        if object_score > 0:
+            return "object"
+        if character_score >= 2 or (character_score >= 1 and body_score >= 1):
             return "character"
-        if any(keyword in text_blob for keyword in OBJECT_KEYWORDS):
+        if character_score == 0 and body_score == 0:
             return "object"
 
-        return "character" if image.height >= image.width else "object"
+        if opaque_bbox and self._looks_human_like(image, opaque_bbox):
+            return "character"
+        return "object"
 
     def summarize_reference(self, reference_image_path: Path, mode: Literal["character", "object"], notes: str | None = None) -> dict[str, Any]:
         image = Image.open(reference_image_path).convert("RGBA")
@@ -78,7 +139,8 @@ class MockImageProvider(ImageProvider):
         target_size: int,
         output_dir: Path,
     ) -> list[GeneratedAsset]:
-        base_image = normalize_to_canvas(Image.open(reference_image_path).convert("RGBA"), target_size)
+        isolated_subject = isolate_main_subject(Image.open(reference_image_path).convert("RGBA"))
+        base_image = normalize_to_canvas(isolated_subject, target_size)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         generated_assets: list[GeneratedAsset] = []
@@ -98,7 +160,8 @@ class MockImageProvider(ImageProvider):
         target_size: int,
         output_dir: Path,
     ) -> list[GeneratedAsset]:
-        base_image = normalize_to_canvas(Image.open(reference_image_path).convert("RGBA"), target_size)
+        isolated_subject = isolate_main_subject(Image.open(reference_image_path).convert("RGBA"))
+        base_image = normalize_to_canvas(isolated_subject, target_size)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         output_path = output_dir / "object.png"
@@ -136,3 +199,33 @@ class MockImageProvider(ImageProvider):
             if keyword in normalized_notes:
                 return keyword
         return fallback
+
+    def _count_keyword_hits(self, text: str, keywords: set[str]) -> int:
+        return sum(1 for keyword in keywords if keyword in text)
+
+    def _looks_human_like(self, image: Image.Image, opaque_bbox: tuple[int, int, int, int]) -> bool:
+        bbox_width = opaque_bbox[2] - opaque_bbox[0]
+        bbox_height = opaque_bbox[3] - opaque_bbox[1]
+        if bbox_width <= 0 or bbox_height <= 0:
+            return False
+
+        aspect_ratio = bbox_height / bbox_width
+        coverage_ratio = (bbox_width * bbox_height) / max(image.width * image.height, 1)
+        if aspect_ratio < 1.35:
+            return False
+        if coverage_ratio < 0.12 or coverage_ratio > 0.72:
+            return False
+
+        silhouette = image.crop(opaque_bbox).getchannel("A")
+        half_height = max(1, silhouette.height // 2)
+        top_half_box = silhouette.crop((0, 0, silhouette.width, half_height)).getbbox()
+        bottom_half_box = silhouette.crop((0, half_height, silhouette.width, silhouette.height)).getbbox()
+        if not top_half_box or not bottom_half_box:
+            return False
+
+        top_width = top_half_box[2] - top_half_box[0]
+        bottom_width = bottom_half_box[2] - bottom_half_box[0]
+
+        # Human-like silhouettes tend to have a narrower upper section and
+        # a vertically oriented footprint. If that is missing, stay with object.
+        return top_width <= bottom_width and bottom_width > silhouette.width * 0.35

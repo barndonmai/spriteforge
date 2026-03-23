@@ -24,6 +24,7 @@ class JobStatusResponse(BaseModel):
     error: str | None
     created_at: datetime
     updated_at: datetime
+    completed_at: datetime | None
 
 
 class JobResultAsset(BaseModel):
@@ -46,5 +47,5 @@ class JobResultsResponse(BaseModel):
     reference_summary: dict[str, Any] | None
     manifest_path: str
     download_url: str
+    completed_at: datetime | None
     outputs: list[JobResultAsset]
-

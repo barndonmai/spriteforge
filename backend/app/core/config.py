@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     storage_root: str = Field(default="storage", validation_alias="STORAGE_ROOT")
     provider: str = Field(default="mock", validation_alias="SPRITEFORGE_PROVIDER")
     gemini_api_key: str | None = Field(default=None, validation_alias="GEMINI_API_KEY")
+    gemini_model: str = Field(default="gemini-2.5-flash", validation_alias="GEMINI_MODEL")
+    gemini_image_model: str = Field(default="gemini-2.5-flash-image", validation_alias="GEMINI_IMAGE_MODEL")
     cors_origins: str = Field(default="http://localhost:3000", validation_alias="CORS_ORIGINS")
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -31,4 +33,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

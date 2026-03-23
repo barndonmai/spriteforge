@@ -1,3 +1,4 @@
+import { formatTorontoDateTime } from "@/lib/formatters";
 import type { JobStatusResponse } from "@/lib/types";
 
 interface JobStatusCardProps {
@@ -11,7 +12,20 @@ const statusClassNames: Record<JobStatusResponse["status"], string> = {
   failed: "bg-red-500/10 text-red-700 ring-1 ring-red-500/20",
 };
 
+const stageLabels: Record<Exclude<JobStatusResponse["stage"], null>, string> = {
+  validating_input: "Validating input",
+  classifying_mode: "Classifying mode",
+  extracting_reference_traits: "Extracting reference traits",
+  generating_assets: "Generating assets",
+  normalizing_assets: "Normalizing assets",
+  packaging_results: "Packaging results",
+};
+
 export function JobStatusCard({ job }: JobStatusCardProps) {
+  const stageLabel = job.stage ? stageLabels[job.stage] : job.status === "completed" ? "Completed" : "Waiting";
+  const updatedAtLabel = formatTorontoDateTime(job.updated_at);
+  const completedAtLabel = formatTorontoDateTime(job.completed_at);
+
   return (
     <section className="rounded-4xl border border-white/70 bg-white/75 p-6 shadow-panel backdrop-blur md:p-7">
       <div className="space-y-5">
@@ -32,7 +46,7 @@ export function JobStatusCard({ job }: JobStatusCardProps) {
         </div>
         <div className="rounded-3xl border border-stone-200 bg-white/85 p-4">
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-stone-500">Stage</p>
-          <p className="mt-2 text-sm font-semibold capitalize text-stone-950">{job.stage ?? "ready"}</p>
+          <p className="mt-2 text-sm font-semibold text-stone-950">{stageLabel}</p>
         </div>
         <div className="rounded-3xl border border-stone-200 bg-white/85 p-4">
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-stone-500">Requested Mode</p>
@@ -41,6 +55,13 @@ export function JobStatusCard({ job }: JobStatusCardProps) {
         <div className="rounded-3xl border border-stone-200 bg-white/85 p-4">
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-stone-500">Resolved Mode</p>
           <p className="mt-2 text-sm font-semibold capitalize text-stone-950">{job.resolved_mode ?? "pending"}</p>
+        </div>
+        <div className="rounded-3xl border border-stone-200 bg-white/85 p-4 sm:col-span-2">
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-stone-500">Last Updated</p>
+          <p className="mt-2 text-sm font-semibold text-stone-950">
+            {updatedAtLabel ?? "Unknown"}
+            {completedAtLabel ? ` · completed ${completedAtLabel}` : ""}
+          </p>
         </div>
       </div>
 

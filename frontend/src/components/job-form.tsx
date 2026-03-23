@@ -75,7 +75,7 @@ export function JobForm(props: JobFormProps) {
             onChange={handleFileInput}
             required
           />
-          <p className="text-sm text-stone-500">{props.file ? props.file.name : "PNG and JPEG only."}</p>
+          <p className="text-sm text-stone-500">{props.file ? `${props.file.name} · ${(props.file.size / 1024).toFixed(0)} KB` : "PNG and JPEG only."}</p>
           {props.fileError ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{props.fileError}</div>
           ) : null}
