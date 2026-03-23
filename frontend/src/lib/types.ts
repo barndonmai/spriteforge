@@ -49,5 +49,6 @@ export interface JobResultsResponse {
   manifest_path: string;
   download_url: string;
   completed_at: string | null;
+  warnings: string[];
   outputs: ResultAsset[];
 }

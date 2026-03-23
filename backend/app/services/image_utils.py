@@ -2,14 +2,13 @@ from collections import Counter
 from collections import deque
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageEnhance, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 
 def normalize_to_canvas(source_image: Image.Image, target_size: int) -> Image.Image:
     image = source_image.convert("RGBA")
-    alpha_box = image.getchannel("A").getbbox()
-    working_image = image.crop(alpha_box) if alpha_box else image
-    working_image.thumbnail((target_size, target_size), Image.Resampling.LANCZOS)
+    working_image = trim_transparent_bounds(image)
+    working_image.thumbnail((target_size, target_size), Image.Resampling.NEAREST)
 
     canvas = Image.new("RGBA", (target_size, target_size), (0, 0, 0, 0))
     offset_x = (target_size - working_image.width) // 2
@@ -20,8 +19,7 @@ def normalize_to_canvas(source_image: Image.Image, target_size: int) -> Image.Im
 
 def normalize_sprite_to_canvas(source_image: Image.Image, target_size: int, *, fill_ratio: float = 0.82) -> Image.Image:
     image = source_image.convert("RGBA")
-    alpha_box = image.getchannel("A").getbbox()
-    working_image = image.crop(alpha_box) if alpha_box else image
+    working_image = trim_transparent_bounds(image)
 
     max_dimension = max(1, int(target_size * fill_ratio))
     working_image.thumbnail((max_dimension, max_dimension), Image.Resampling.NEAREST)
@@ -49,23 +47,196 @@ def isolate_main_subject(source_image: Image.Image) -> Image.Image:
     subject_box = refined_subject_mask.getbbox()
 
     if not subject_box:
-        return image
+        cleared_background = make_border_background_transparent(image)
+        cleared_box = cleared_background.getchannel("A").getbbox()
+        if not cleared_box:
+            return image
+        return cleared_background.crop(_expand_bbox(cleared_box, cleared_background.size, padding=2))
 
     isolated = image.copy()
     isolated.putalpha(refined_subject_mask)
+    isolated = make_border_background_transparent(isolated)
     return isolated.crop(_expand_bbox(subject_box, image.size, padding=2))
 
 
 def prepare_object_sprite_asset(source_image: Image.Image, target_size: int) -> Image.Image:
-    isolated_subject = isolate_main_subject(source_image)
-    cleaned_subject = remove_small_alpha_islands(isolated_subject, min_component_size=max(12, target_size // 3))
-    simplified_subject = simplify_sprite_colors(cleaned_subject, max_colors=24)
-    return normalize_sprite_to_canvas(simplified_subject, target_size, fill_ratio=0.8)
+    return normalize_sprite_to_canvas(source_image.convert("RGBA"), target_size, fill_ratio=0.9)
 
 
 def save_png(image: Image.Image, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    image.save(destination, format="PNG")
+    image.convert("RGBA").save(destination, format="PNG")
+
+
+def remove_chroma_green_background(source_image: Image.Image) -> Image.Image:
+    image = source_image.convert("RGBA")
+    background_key = _estimate_green_screen_key(image)
+    if background_key is None:
+        return image
+
+    output = image.copy()
+    pixels = output.load()
+    width, height = output.size
+
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha == 0:
+                continue
+
+            similarity = _green_screen_similarity((red, green, blue), background_key)
+            if similarity >= 0.92:
+                pixels[x, y] = (red, green, blue, 0)
+                continue
+
+            if similarity >= 0.72:
+                fade = max(0.0, min(1.0, (0.92 - similarity) / 0.20))
+                pixels[x, y] = (red, green, blue, int(alpha * fade))
+
+    output = despill_green_edges(output, background_key)
+    output = remove_residual_green_fragments(output, background_key)
+    return remove_connected_green_regions(output, background_key)
+
+
+def despill_green_edges(source_image: Image.Image, key_color: tuple[int, int, int]) -> Image.Image:
+    image = source_image.convert("RGBA")
+    output = image.copy()
+    pixels = output.load()
+    width, height = output.size
+
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha == 0:
+                continue
+
+            similarity = _green_screen_similarity((red, green, blue), key_color)
+            if similarity < 0.35:
+                continue
+            touches_transparent = _touches_transparent_pixel(output, x, y)
+            if alpha == 255 and not touches_transparent:
+                continue
+
+            capped_green = min(green, max(red, blue) + 8)
+            if alpha < 255 or touches_transparent:
+                adjusted_green = capped_green
+            else:
+                strength = min(1.0, max(0.0, (similarity - 0.35) / 0.45))
+                adjusted_green = int(green + ((capped_green - green) * strength))
+            pixels[x, y] = (red, adjusted_green, blue, alpha)
+
+    return output
+
+
+def remove_residual_green_fragments(source_image: Image.Image, key_color: tuple[int, int, int]) -> Image.Image:
+    image = source_image.convert("RGBA")
+    output = image.copy()
+    pixels = output.load()
+    width, height = output.size
+
+    for y in range(height):
+        for x in range(width):
+            red, green, blue, alpha = pixels[x, y]
+            if alpha == 0:
+                continue
+
+            similarity = _green_screen_similarity((red, green, blue), key_color)
+            if similarity < 0.28:
+                continue
+
+            touches_transparent = _touches_transparent_pixel(output, x, y)
+            touches_edge = _touches_image_edge(x, y, width, height)
+            if touches_edge and similarity >= 0.22:
+                pixels[x, y] = (red, green, blue, 0)
+                continue
+
+            if touches_transparent and similarity >= 0.34:
+                pixels[x, y] = (red, green, blue, 0)
+                continue
+
+            if alpha < 224 and similarity >= 0.28:
+                pixels[x, y] = (red, green, blue, 0)
+
+    return output
+
+
+def remove_connected_green_regions(source_image: Image.Image, key_color: tuple[int, int, int]) -> Image.Image:
+    image = source_image.convert("RGBA")
+    width, height = image.size
+    visited: set[tuple[int, int]] = set()
+    output = image.copy()
+    output_pixels = output.load()
+
+    for y in range(height):
+        for x in range(width):
+            if (x, y) in visited:
+                continue
+
+            red, green, blue, alpha = image.getpixel((x, y))
+            if alpha == 0:
+                continue
+
+            similarity = _green_screen_similarity((red, green, blue), key_color)
+            if similarity < 0.18:
+                continue
+
+            component: list[tuple[int, int]] = []
+            queue: deque[tuple[int, int]] = deque([(x, y)])
+            visited.add((x, y))
+            touches_transparent = False
+            touches_edge = False
+            max_similarity = similarity
+
+            while queue:
+                current_x, current_y = queue.popleft()
+                component.append((current_x, current_y))
+                current_red, current_green, current_blue, current_alpha = image.getpixel((current_x, current_y))
+                max_similarity = max(
+                    max_similarity,
+                    _green_screen_similarity((current_red, current_green, current_blue), key_color),
+                )
+
+                if _touches_image_edge(current_x, current_y, width, height):
+                    touches_edge = True
+
+                for neighbor_x, neighbor_y in _neighbors(current_x, current_y, width, height):
+                    neighbor_red, neighbor_green, neighbor_blue, neighbor_alpha = image.getpixel((neighbor_x, neighbor_y))
+                    if neighbor_alpha == 0:
+                        touches_transparent = True
+                        continue
+
+                    if (neighbor_x, neighbor_y) in visited:
+                        continue
+
+                    neighbor_similarity = _green_screen_similarity((neighbor_red, neighbor_green, neighbor_blue), key_color)
+                    if neighbor_similarity < 0.18:
+                        continue
+
+                    visited.add((neighbor_x, neighbor_y))
+                    queue.append((neighbor_x, neighbor_y))
+
+            if not ((touches_transparent or touches_edge) and max_similarity >= 0.28):
+                continue
+
+            for component_x, component_y in component:
+                red, green, blue, _ = output_pixels[component_x, component_y]
+                output_pixels[component_x, component_y] = (red, green, blue, 0)
+
+    return output
+
+
+def trim_transparent_bounds(source_image: Image.Image) -> Image.Image:
+    image = source_image.convert("RGBA")
+    alpha_box = image.getchannel("A").getbbox()
+    if not alpha_box:
+        return image
+    return image.crop(alpha_box)
+
+
+def has_real_transparency(source_image: Image.Image) -> bool:
+    alpha = source_image.convert("RGBA").getchannel("A")
+    minimum_alpha, _ = alpha.getextrema()
+    return minimum_alpha < 255
 
 
 def build_palette_notes(image: Image.Image, max_colors: int = 4) -> str:
@@ -137,11 +308,13 @@ def rgb_to_hex(color: tuple[int, int, int]) -> str:
     return "#{:02x}{:02x}{:02x}".format(*color)
 
 
-def simplify_sprite_colors(image: Image.Image, max_colors: int = 24) -> Image.Image:
+def simplify_sprite_colors(image: Image.Image, max_colors: int = 24, blur_radius: float = 0.0) -> Image.Image:
     rgba_image = image.convert("RGBA")
     alpha = rgba_image.getchannel("A")
     opaque_rgb = Image.new("RGB", rgba_image.size, (0, 0, 0))
     opaque_rgb.paste(rgba_image.convert("RGB"), mask=alpha)
+    if blur_radius > 0:
+        opaque_rgb = opaque_rgb.filter(ImageFilter.GaussianBlur(radius=blur_radius))
     quantized = opaque_rgb.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT).convert("RGBA")
     quantized.putalpha(alpha)
     return quantized
@@ -158,6 +331,26 @@ def remove_small_alpha_islands(image: Image.Image, min_component_size: int = 16)
     if not cleaned_bbox:
         return output
     return output.crop(_expand_bbox(cleaned_bbox, output.size, padding=1))
+
+
+def make_border_background_transparent(source_image: Image.Image) -> Image.Image:
+    image = source_image.convert("RGBA")
+    background_color = _estimate_background_color(image)
+    background_mask = _build_background_mask(image, background_color)
+    if not background_mask.getbbox():
+        return image
+
+    output = image.copy()
+    alpha = output.getchannel("A")
+    width, height = output.size
+
+    for y in range(height):
+        for x in range(width):
+            if background_mask.getpixel((x, y)) > 0:
+                alpha.putpixel((x, y), 0)
+
+    output.putalpha(alpha)
+    return output
 
 
 def _has_transparent_pixels(alpha: Image.Image) -> bool:
@@ -181,6 +374,29 @@ def _estimate_background_color(image: Image.Image) -> tuple[int, int, int]:
         return (255, 255, 255)
 
     return Counter(border_pixels).most_common(1)[0][0]
+
+
+def _estimate_green_screen_key(image: Image.Image) -> tuple[int, int, int] | None:
+    width, height = image.size
+    border_pixels: list[tuple[int, int, int]] = []
+
+    for x in range(width):
+        border_pixels.append(image.getpixel((x, 0))[:3])
+        border_pixels.append(image.getpixel((x, height - 1))[:3])
+
+    for y in range(1, height - 1):
+        border_pixels.append(image.getpixel((0, y))[:3])
+        border_pixels.append(image.getpixel((width - 1, y))[:3])
+
+    green_pixels = [pixel for pixel in border_pixels if _is_green_dominant(pixel)]
+    if len(green_pixels) < max(8, len(border_pixels) // 12):
+        return None
+
+    count = len(green_pixels)
+    red = sum(pixel[0] for pixel in green_pixels) // count
+    green = sum(pixel[1] for pixel in green_pixels) // count
+    blue = sum(pixel[2] for pixel in green_pixels) // count
+    return (red, green, blue)
 
 
 def _build_background_mask(image: Image.Image, background_color: tuple[int, int, int]) -> Image.Image:
@@ -218,6 +434,46 @@ def _build_background_mask(image: Image.Image, background_color: tuple[int, int,
                 visited.add((neighbor_x, neighbor_y))
                 neighbor_pixel = image.getpixel((neighbor_x, neighbor_y))
                 if _is_background_like(neighbor_pixel, background_color):
+                    queue.append((neighbor_x, neighbor_y))
+
+    return mask
+
+
+def _build_green_screen_mask(image: Image.Image, key_color: tuple[int, int, int]) -> Image.Image:
+    width, height = image.size
+    mask = Image.new("L", (width, height), 0)
+    visited: set[tuple[int, int]] = set()
+    queue: deque[tuple[int, int]] = deque()
+
+    border_points = (
+        [(x, 0) for x in range(width)]
+        + [(x, height - 1) for x in range(width)]
+        + [(0, y) for y in range(1, height - 1)]
+        + [(width - 1, y) for y in range(1, height - 1)]
+    )
+
+    for point in border_points:
+        if point in visited:
+            continue
+
+        pixel = image.getpixel(point)
+        if not _is_green_screen_like(pixel, key_color):
+            continue
+
+        queue.append(point)
+        visited.add(point)
+
+        while queue:
+            current_x, current_y = queue.popleft()
+            mask.putpixel((current_x, current_y), 255)
+
+            for neighbor_x, neighbor_y in _neighbors(current_x, current_y, width, height):
+                if (neighbor_x, neighbor_y) in visited:
+                    continue
+
+                visited.add((neighbor_x, neighbor_y))
+                neighbor_pixel = image.getpixel((neighbor_x, neighbor_y))
+                if _is_green_screen_like(neighbor_pixel, key_color):
                     queue.append((neighbor_x, neighbor_y))
 
     return mask
@@ -338,6 +594,40 @@ def _is_background_like(pixel: tuple[int, int, int, int], background_color: tupl
 
     color_distance = abs(red - background_color[0]) + abs(green - background_color[1]) + abs(blue - background_color[2])
     return color_distance <= 72
+
+
+def _is_green_dominant(color: tuple[int, int, int]) -> bool:
+    red, green, blue = color
+    return green >= 110 and green - max(red, blue) >= 18
+
+
+def _is_green_screen_like(pixel: tuple[int, int, int, int], key_color: tuple[int, int, int]) -> bool:
+    red, green, blue, alpha = pixel
+    if alpha < 20:
+        return True
+
+    return _green_screen_similarity((red, green, blue), key_color) >= 0.72
+
+
+def _green_screen_similarity(color: tuple[int, int, int], key_color: tuple[int, int, int]) -> float:
+    red, green, blue = color
+    if not _is_green_dominant((red, green, blue)):
+        return 0.0
+
+    color_distance = abs(red - key_color[0]) + abs(green - key_color[1]) + abs(blue - key_color[2])
+    return max(0.0, 1.0 - (color_distance / 120.0))
+
+
+def _touches_transparent_pixel(image: Image.Image, x: int, y: int) -> bool:
+    width, height = image.size
+    for neighbor_x, neighbor_y in _neighbors(x, y, width, height):
+        if image.getpixel((neighbor_x, neighbor_y))[3] == 0:
+            return True
+    return False
+
+
+def _touches_image_edge(x: int, y: int, width: int, height: int) -> bool:
+    return x <= 1 or y <= 1 or x >= width - 2 or y >= height - 2
 
 
 def _quantize_rgb(color: tuple[int, int, int]) -> tuple[int, int, int]:

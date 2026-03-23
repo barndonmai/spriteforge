@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
+from shutil import copy2
 
 from PIL import Image
 
@@ -120,9 +121,22 @@ def _normalize_assets(job_id: str, generated_assets: list[GeneratedAsset], targe
     normalized_assets: list[GeneratedAsset] = []
 
     for asset in generated_assets:
+        final_path = final_output_directory / asset.filename
+        if asset.skip_postprocessing:
+            final_path.parent.mkdir(parents=True, exist_ok=True)
+            copy2(asset.path, final_path)
+            normalized_assets.append(
+                GeneratedAsset(
+                    filename=asset.filename,
+                    label=asset.label,
+                    path=final_path,
+                    skip_postprocessing=True,
+                )
+            )
+            continue
+
         image = Image.open(asset.path).convert("RGBA")
         normalized_image = normalize_to_canvas(image, target_size)
-        final_path = final_output_directory / asset.filename
         save_png(normalized_image, final_path)
         normalized_assets.append(GeneratedAsset(filename=asset.filename, label=asset.label, path=final_path))
 

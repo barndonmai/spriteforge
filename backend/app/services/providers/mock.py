@@ -129,6 +129,11 @@ class MockImageProvider(ImageProvider):
             ),
             "palette_notes": palette_notes,
             "silhouette_notes": silhouette_notes,
+            "key_identifying_features": self._find_keyword(
+                notes,
+                ["handle", "strap", "emblem", "symbol", "lid", "spout"],
+                fallback="main identifying features approximated from the uploaded reference",
+            ),
         }
 
     def generate_character_directions(

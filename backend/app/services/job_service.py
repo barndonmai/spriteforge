@@ -142,6 +142,7 @@ def read_results(job: Job, request: Request) -> JobResultsResponse:
         manifest_path=job.manifest_path,
         download_url=str(request.url_for("download_job_results", job_id=job.id)),
         completed_at=ensure_utc_datetime(job.completed_at),
+        warnings=manifest.get("warnings", []),
         outputs=outputs,
     )
 

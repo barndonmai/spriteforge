@@ -20,6 +20,7 @@ class GeneratedAsset:
     filename: str
     label: str
     path: Path
+    skip_postprocessing: bool = False
 
 
 class ImageProvider(ABC):
@@ -54,4 +55,3 @@ class ImageProvider(ABC):
         output_dir: Path,
     ) -> list[GeneratedAsset]:
         raise NotImplementedError
-

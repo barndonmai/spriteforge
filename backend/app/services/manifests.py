@@ -5,6 +5,7 @@ from PIL import Image
 
 from app.models.job import Job
 from app.services.datetime_utils import ensure_utc_datetime
+from app.services.image_utils import has_real_transparency
 from app.services.storage import to_storage_relative_path
 
 
@@ -13,12 +14,17 @@ def build_manifest(job: Job, final_output_paths: list[Path]) -> dict:
         raise ValueError("Cannot build a manifest without any final output assets.")
 
     outputs = []
+    warnings: list[str] = []
     for output_path in final_output_paths:
         if not output_path.exists():
             raise FileNotFoundError(f"Missing final output asset: {output_path.name}")
 
         with Image.open(output_path) as image:
             width, height = image.size
+            if not has_real_transparency(image):
+                warnings.append(
+                    f"{output_path.name} is fully opaque. The generated background may be baked into the image instead of using real transparency."
+                )
 
         label = output_path.stem.replace("_", " ")
         outputs.append(
@@ -42,5 +48,6 @@ def build_manifest(job: Job, final_output_paths: list[Path]) -> dict:
         "reference_summary": job.reference_summary,
         "created_at": ensure_utc_datetime(job.created_at).isoformat(),
         "completed_at": ensure_utc_datetime(job.completed_at or datetime.now(timezone.utc)).isoformat(),
+        "warnings": warnings,
         "outputs": outputs,
     }

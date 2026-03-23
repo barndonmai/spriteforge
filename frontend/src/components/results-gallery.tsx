@@ -50,6 +50,17 @@ export function ResultsGallery({ results }: ResultsGalleryProps) {
         </div>
       ) : null}
 
+      {results.warnings.length > 0 ? (
+        <div className="rounded-3xl border border-amber-300 bg-amber-50/90 p-5">
+          <h3 className="text-lg font-semibold text-amber-950">Output Notes</h3>
+          <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-900">
+            {results.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {results.outputs.map((asset) => (
           <article className="rounded-3xl border border-stone-200 bg-white/85 p-4" key={asset.filename}>

@@ -48,4 +48,5 @@ class JobResultsResponse(BaseModel):
     manifest_path: str
     download_url: str
     completed_at: datetime | None
+    warnings: list[str]
     outputs: list[JobResultAsset]
