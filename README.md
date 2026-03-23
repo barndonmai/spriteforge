@@ -6,7 +6,7 @@ The goal is simple: take a reference image, run it through a lightweight local p
 
 This v1 scaffold includes:
 
-- `frontend/`: a small Next.js App Router UI for upload, polling, preview, and download
+- `frontend/`: a small Next.js App Router UI with TypeScript and Tailwind CSS for upload, polling, preview, and download
 - `backend/`: a FastAPI backend with SQLite, Celery, Redis, local storage, manifest output, and provider wiring
 - `MockImageProvider`: a fully runnable local provider for end-to-end testing without paid API calls
 - `GeminiImageProvider`: a backend-only scaffold behind the same interface for later experimentation
@@ -65,6 +65,7 @@ It intentionally does not include auth, billing, cloud storage, accounts, or mul
 - The provider interface isolates classification, structured summary extraction, and generation so I can swap providers later without reshaping the app.
 - Local filesystem storage is deterministic by `job_id`, with separate reference, raw output, final output, manifest, and ZIP paths.
 - Pillow is used only for lightweight mechanical normalization, centering, transparency preservation, and mock placeholder output generation.
+- The frontend uses Tailwind CSS so the UI stays easy to reshape without relying on brittle handwritten layout CSS.
 
 ## Local setup
 

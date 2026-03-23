@@ -92,17 +92,23 @@ export function SpriteForgeApp() {
   };
 
   return (
-    <main className="page-shell">
-      <header className="hero">
-        <span className="eyebrow">SpriteForge v1</span>
-        <h1>Game-ready pixel assets, with a clean local pipeline.</h1>
-        <p>
-          Upload a reference, choose character, object, or auto, and let the FastAPI plus Celery pipeline produce a
-          manifest-backed sprite package with mock generation you can test today.
-        </p>
+    <main className="mx-auto min-h-screen max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+      <header className="mb-8 space-y-4 lg:mb-10">
+        <span className="inline-flex w-fit rounded-full border border-stone-200 bg-white/70 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-stone-600 shadow-sm backdrop-blur">
+          SpriteForge v1
+        </span>
+        <div className="space-y-4">
+          <h1 className="max-w-4xl text-4xl font-bold tracking-[-0.05em] text-stone-950 sm:text-5xl lg:text-6xl">
+            Game-ready pixel assets, with a clean local pipeline.
+          </h1>
+          <p className="max-w-3xl text-base leading-7 text-stone-600 sm:text-lg">
+            Upload a reference, choose character, object, or auto, and let the FastAPI plus Celery pipeline produce a
+            manifest-backed sprite package with mock generation you can test today.
+          </p>
+        </div>
       </header>
 
-      <div className="layout-grid">
+      <div className="grid items-start gap-6 lg:grid-cols-[420px_minmax(0,1fr)]">
         <JobForm
           file={file}
           mode={mode}
@@ -118,14 +124,16 @@ export function SpriteForgeApp() {
           onSubmit={handleSubmit}
         />
 
-        <div className="stack">
-          {error ? <div className="error-banner">{error}</div> : null}
+        <div className="space-y-6">
+          {error ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+          ) : null}
           {job ? (
             <JobStatusCard job={job} />
           ) : (
-            <section className="panel panel-content empty-state">
-              <h2 style={{ margin: 0 }}>No job running yet</h2>
-              <p style={{ margin: 0 }}>
+            <section className="grid min-h-80 place-content-center gap-2 rounded-4xl border border-dashed border-stone-300 bg-white/50 p-8 text-center shadow-panel backdrop-blur">
+              <h2 className="text-2xl font-bold tracking-tight text-stone-950">No job running yet</h2>
+              <p className="max-w-lg text-sm leading-6 text-stone-600">
                 Submit a reference image to start the pipeline. The status card, preview gallery, and download action
                 will appear here.
               </p>

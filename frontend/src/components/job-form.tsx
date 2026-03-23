@@ -23,6 +23,9 @@ const modeOptions: Array<{ value: JobMode; title: string; copy: string }> = [
   { value: "auto", title: "Auto", copy: "Classify first, then run the correct flow." },
 ];
 
+const fieldClassName =
+  "w-full rounded-3xl border border-stone-200 bg-white/90 px-4 py-3 text-stone-900 shadow-sm outline-none transition focus:border-forge-500 focus:ring-4 focus:ring-forge-500/10";
+
 export function JobForm(props: JobFormProps) {
   const handleFileInput = (event: ChangeEvent<HTMLInputElement>) => {
     const nextFile = event.target.files?.[0] ?? null;
@@ -48,55 +51,65 @@ export function JobForm(props: JobFormProps) {
   };
 
   return (
-    <form className="panel panel-content stack" onSubmit={props.onSubmit}>
-      <div className="stack">
+    <form
+      className="rounded-4xl border border-white/70 bg-white/75 p-6 shadow-panel backdrop-blur md:p-7"
+      onSubmit={props.onSubmit}
+    >
+      <div className="space-y-6">
         <div>
-          <h2 style={{ margin: 0, fontSize: "1.35rem" }}>Create Job</h2>
-          <p className="muted-copy" style={{ marginBottom: 0 }}>
+          <h2 className="text-2xl font-bold tracking-tight text-stone-950">Create Job</h2>
+          <p className="mt-2 text-sm leading-6 text-stone-600">
             Upload one reference image, choose the generation mode, and let the worker produce the final asset package.
           </p>
         </div>
 
-        <div className="field">
-          <label htmlFor="reference-image">Reference Image</label>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-stone-900" htmlFor="reference-image">
+            Reference Image
+          </label>
           <input
             id="reference-image"
-            className="file-input"
+            className={fieldClassName}
             type="file"
             accept=".png,.jpg,.jpeg,image/png,image/jpeg"
             onChange={handleFileInput}
             required
           />
-          <span className="muted-copy">{props.file ? props.file.name : "PNG and JPEG only."}</span>
-          {props.fileError ? <span className="error-banner">{props.fileError}</span> : null}
+          <p className="text-sm text-stone-500">{props.file ? props.file.name : "PNG and JPEG only."}</p>
+          {props.fileError ? (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{props.fileError}</div>
+          ) : null}
         </div>
 
-        <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-          <legend>Mode</legend>
-          <div className="radio-grid">
+        <fieldset className="space-y-2 border-0 p-0">
+          <legend className="text-sm font-semibold text-stone-900">Mode</legend>
+          <div className="grid gap-3 sm:grid-cols-3">
             {modeOptions.map((option) => (
-              <label className="radio-card" key={option.value}>
+              <label className="block cursor-pointer" key={option.value}>
                 <input
                   checked={props.mode === option.value}
                   name="mode"
+                  className="peer sr-only"
                   type="radio"
                   value={option.value}
                   onChange={() => props.onModeChange(option.value)}
                 />
-                <span className="radio-surface">
-                  <span className="radio-title">{option.title}</span>
-                  <span className="radio-copy">{option.copy}</span>
+                <span className="flex min-h-32 w-full flex-col rounded-3xl border border-stone-200 bg-white/85 p-4 transition duration-150 peer-checked:border-forge-500 peer-checked:bg-forge-500/10 peer-checked:shadow-sm">
+                  <span className="text-lg font-semibold text-stone-950">{option.title}</span>
+                  <span className="mt-2 text-sm leading-6 text-stone-600">{option.copy}</span>
                 </span>
               </label>
             ))}
           </div>
         </fieldset>
 
-        <div className="field">
-          <label htmlFor="target-size">Target Size</label>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-stone-900" htmlFor="target-size">
+            Target Size
+          </label>
           <select
             id="target-size"
-            className="select"
+            className={fieldClassName}
             value={props.targetSize}
             onChange={(event) => props.onTargetSizeChange(Number(event.target.value))}
           >
@@ -108,22 +121,28 @@ export function JobForm(props: JobFormProps) {
           </select>
         </div>
 
-        <div className="field">
-          <label htmlFor="notes">Notes</label>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-stone-900" htmlFor="notes">
+            Notes
+          </label>
           <textarea
             id="notes"
-            className="textarea"
+            className={`${fieldClassName} min-h-36 resize-y`}
             placeholder="Optional art notes. Example: red hood, silver shoulder armor, emerald cape."
             value={props.notes}
             onChange={(event) => props.onNotesChange(event.target.value)}
           />
         </div>
-      </div>
 
-      <div className="button-row">
-        <button className="button button-primary" disabled={props.isSubmitting || !props.file} type="submit">
+        <div className="flex items-center gap-3">
+        <button
+          className="inline-flex min-h-14 items-center justify-center rounded-full bg-forge-500 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-forge-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+          disabled={props.isSubmitting || !props.file}
+          type="submit"
+        >
           {props.isSubmitting ? "Submitting..." : "Create Sprite Job"}
         </button>
+        </div>
       </div>
     </form>
   );
